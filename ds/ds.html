@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>흥진고 시설 고장 신고</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<style>
+body{ 
+  font-family:Arial;
+  margin:0;
+  background:#f4f6f8;
+  text-align:center;
+}
+
+header{
+  background:#2b6cb0;
+  color:white;
+  padding:20px;
+}
+
+/* 🔐 로그인 UI */
+#loginBox{
+  position:fixed;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  background:white;
+  padding:25px;
+  border-radius:15px;
+  box-shadow:0 5px 20px rgba(0,0,0,0.2);
+  width:220px;
+}
+
+#loginBox input,
+#loginBox select{
+  width:100%;
+  padding:8px;
+  margin:6px 0;
+  border:1px solid #ddd;
+  border-radius:8px;
+  font-size:14px;
+  box-sizing: border-box;
+}
+
+#loginBox button{
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  background:#3182ce;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+/* 버튼 */
+button{
+  padding:10px 15px;
+  margin:5px;
+  border:none;
+  border-radius:8px;
+  background:#3182ce;
+  color:white;
+  cursor:pointer;
+}
+
+/* 통계 */
+.card{
+  display:inline-block;
+  background:white;
+  padding:10px;
+  margin:10px;
+  border-radius:10px;
+  width:120px;
+}
+
+/* 지도 */
+.map{
+  width:95%;
+  max-width:1400px;
+  aspect-ratio:16/9;
+  margin:20px auto;
+  position:relative;
+  border-radius:10px;
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:contain;
+  cursor:crosshair;
+  /* 📱 모바일 최적화: 터치 시 화면 확대/스크롤 방지 */
+  touch-action: none; 
+  overflow: hidden;
+  border: 1px solid #ddd;
+  background-color: #fff;
+}
+
+/* 마커 */
+.marker{
+  width:16px;
+  height:16px;
+  background:red;
+  border:2px solid white;
+  border-radius:50%;
+  position:absolute;
+  cursor:pointer;
+  transform: translate(-50%, -50%);
+}
+
+/* 모달 */
+.modal{
+  display:none;
+  position:fixed;
+  top:0;left:0;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.5);
+  z-index: 1000;
+}
+
+.modal-content{
+  background:white;
+  width:300px;
+  margin:100px auto;
+  padding:20px;
+  border-radius:10px;
+  text-align: left;
+}
+
+input,select,textarea{
+  width:100%;
+  margin:5px 0;
+  padding:8px;
+  box-sizing: border-box;
+}
+
+/* 📱 모바일 화면 최적화 CSS */
+@media (max-width: 600px) {
+  #loginBox { width: 80%; max-width: 300px; }
+  .card { width: calc(40% - 20px); margin: 5px; padding: 8px; font-size: 14px; }
+  #app > button { padding: 12px 10px; margin: 3px; font-size: 14px; }
+  .modal-content { width: 85%; margin: 30% auto; }
+  .marker { width: 20px; height: 20px; } /* 터치하기 쉽게 크기 키움 */
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>🏫 흥진고 시설 고장 신고</h1>
+</header>
+
+<div id="loginBox">
+  <h3 style="text-align:center; margin-top:0;">로그인</h3>
+  <input id="name" placeholder="이름">
+  <select id="role">
+    <option value="student">학생</option>
+    <option value="teacher">교직원</option>
+  </select>
+  <button onclick="login()">로그인</button>
+</div>
+
+<div id="app" style="display:none;">
+  <h3 id="userInfo"></h3>
+  <button onclick="logout()" style="background:#718096;">로그아웃</button>
+  <br>
+  <button onclick="setFloor(1)">1층</button>
+  <button onclick="setFloor(2)">2층</button>
+  <button onclick="setFloor(3)">3층</button>
+  <button onclick="setFloor(4)">4층</button>
+  <button onclick="openModal()" style="background:#e53e3e;">+ 신고</button>
+
+  <div>
+    <div class="card">1층<br><b id="c1">0</b></div>
+    <div class="card">2층<br><b id="c2">0</b></div>
+    <div class="card">3층<br><b id="c3">0</b></div>
+    <div class="card">4층<br><b id="c4">0</b></div>
+  </div>
+
+  <div class="map" id="map"></div>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <h3 style="margin-top:0; text-align:center;">시설 신고</h3>
+    <h4>위험도</h4>
+    <select id="level">
+      <option>낮음</option>
+      <option>보통</option>
+      <option>높음</option>
+    </select>
+    <h4>설명</h4>
+    <textarea id="desc" placeholder="고장 내용을 적어주세요" rows="4"></textarea>
+    <div style="margin-top:10px; text-align:center;">
+      <button onclick="addReport()">등록</button>
+      <button onclick="closeModal()" style="background:#a0aec0;">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let user = null;
+let currentFloor = 1;
+let tempX = 0;
+let tempY = 0;
+
+/* 데이터 */
+function getReports(){
+  return JSON.parse(localStorage.getItem("reports") || "[]");
+}
+
+function save(r){
+  localStorage.setItem("reports", JSON.stringify(r));
+}
+
+/* 로그인 */
+function login(){
+  let name = document.getElementById("name").value.trim();
+  let role = document.getElementById("role").value;
+  
+  /* 이름 검증 */
+  let korName = /^[가-힣]{2,6}$/;
+  if(!korName.test(name)){
+    alert("이름을 올바르게 입력하세요 (한글 2~6자)");
+    return;
+  }
+  
+  user = { name: name, role: role };
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("userInfo").innerText = user.name + " (" + (user.role == "teacher" ? "교직원" : "학생") + ")";
+  
+  render();
+  updateStats();
+}
+
+/* 로그아웃 */
+function logout(){
+  user = null;
+  document.getElementById("app").style.display = "none";
+  document.getElementById("loginBox").style.display = "block";
+}
+
+/* 층 변경 */
+function setFloor(f){
+  currentFloor = f;
+  render();
+}
+
+/* 지도 */
+function render(){
+  let map = document.getElementById("map");
+  map.innerHTML = "";
+  map.style.backgroundImage = `url('floor${currentFloor}.png')`;
+
+  let all = getReports();
+  let r = all.filter(x => x.floor == currentFloor);
+
+  r.forEach((v) => {
+    let realIndex = all.findIndex(x =>
+      x.floor == v.floor && x.x == v.x && x.y == v.y && x.desc == v.desc
+    );
+
+    let m = document.createElement("div");
+    m.className = "marker";
+    m.style.left = v.x + "px";
+    m.style.top = v.y + "px";
+
+    /* 긴급도 색상 (오타 수정됨) */
+    if(v.level == "낮음"){
+      m.style.background = "#FFC04D";
+    } else if(v.level == "보통"){
+      m.style.background = "#FF8C00"; /* 색상 빠진 부분 수정 */
+    } else if(v.level == "높음"){
+      m.style.background = "red";
+    }
+
+    let drag = false;
+
+    /* 🖥️ 마우스 드래그 시작 */
+    m.onmousedown = function(e){
+      drag = true;
+      e.stopPropagation();
+    };
+
+    /* 📱 스마트폰 터치 드래그 시작 [추가됨] */
+    m.ontouchstart = function(e){
+      drag = true;
+      e.stopPropagation();
+    };
+
+    /* 🖥️ 마우스 이동 */
+    document.onmousemove = function(e){
+      if(!drag) return;
+      let rect = map.getBoundingClientRect();
+      let x = e.clientX - rect.left;
+      let y = e.clientY - rect.top;
+      x = Math.max(0, Math.min(rect.width, x));
+      y = Math.max(0, Math.min(rect.height, y));
+      m.style.left = x + "px";
+      m.style.top = y + "px";
+      all[realIndex].x = x;
+      all[realIndex].y = y;
+    };
+
+    /* 📱 스마트폰 터치 이동 [추가됨] */
+    document.addEventListener('touchmove', function(e){
+      if(!drag) return;
+      let touch = e.touches[0];
+      let rect = map.getBoundingClientRect();
+      let x = touch.clientX - rect.left;
+      let y = touch.clientY - rect.top;
+      x = Math.max(0, Math.min(rect.width, x));
+      y = Math.max(0, Math.min(rect.height, y));
+      m.style.left = x + "px";
+      m.style.top = y + "px";
+      all[realIndex].x = x;
+      all[realIndex].y = y;
+    }, { passive: false });
+
+    /* 🖥️ 마우스 드래그 종료 */
+    document.onmouseup = function(){
+      if(drag){
+        drag = false;
+        save(all);
+      }
+    };
+
+    /* 📱 스마트폰 터치 드래그 종료 [추가됨] */
+    document.ontouchend = function(){
+      if(drag){
+        drag = false;
+        save(all);
+      }
+    };
+
+    /* 마커 클릭/터치 시 메뉴 */
+    m.onclick = (e) => {
+      e.stopPropagation();
+      let text = "긴급도: " + v.level + "\n설명: " + v.desc + "\n상태: " + (v.status || "접수");
+
+      if(user.role == "teacher"){
+        text = "신고자: " + (v.user || "알 수 없음") + "\n" + text;
+      }
+
+      if(user.role == "teacher"){
+        let c = prompt(text + "\n\n1:삭제\n2:진행중\n3:완료");
+        if(c == "1"){
+          let r = getReports();
+          r.splice(realIndex, 1);
+          save(r);
+          render();
+          updateStats();
+        }
+        if(c == "2"){
+          all[realIndex].status = "진행중";
+          save(all);
+          render();
+        }
+        if(c == "3"){
+          all[realIndex].status = "완료";
+          save(all);
+          render();
+        }
+      } else {
+        alert(text);
+      }
+    };
+
+    map.appendChild(m);
+  });
+
+  /* 마우스/터치 클릭 위치에 모달 띄우기 */
+  map.onclick = function(e){
+    if(!user) return;
+    let rect = map.getBoundingClientRect();
+    tempX = e.clientX - rect.left;
+    tempY = e.clientY - rect.top;
+    openModal();
+  };
+}
+
+/* 신고 등록 */
+function addReport(){
+  let descVal = document.getElementById("desc").value.trim();
+  if(!descVal) {
+    alert("설명을 입력해주세요.");
+    return;
+  }
+
+  let r = getReports();
+  r.push({
+    floor: currentFloor,
+    x: tempX,
+    y: tempY,
+    level: document.getElementById("level").value,
+    desc: descVal,
+    status: "접수",
+    user: user.name
+  });
+  save(r);
+  render();
+  updateStats();
+  closeModal();
+}
+
+/* 통계 업데이트 */
+function updateStats(){
+  let r = getReports();
+  for(let i = 1; i <= 4; i++){
+    document.getElementById("c" + i).innerText = r.filter(x => x.floor == i).length;
+  }
+}
+
+/* 모달 열기/닫기 */
+function openModal(){
+  document.getElementById("modal").style.display = "block";
+}
+function closeModal(){
+  document.getElementById("modal").style.display = "none";
+  document.getElementById("desc").value = "";
+}
+</script>
+</body>
+</html>
